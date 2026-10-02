@@ -31,6 +31,29 @@ function radio_exists(path, macaddr, phy, radio) {
 	}
 }
 
+// 智慧自癒修剪：清理在 sysfs 中已不存在的幽靈 radio 與關聯 VAP (防範 PCIe 漂移與 radio3/4/5 堆疊)
+for (let name, s in config) {
+	if (s[".type"] != "wifi-device")
+		continue;
+	let is_ghost = false;
+	if (s.path && !readfile("/sys/devices/platform/" + s.path + "/uevent"))
+		is_ghost = true;
+	else if (s.phy && !readfile("/sys/class/ieee80211/" + s.phy + "/macaddress"))
+		is_ghost = true;
+
+	if (is_ghost) {
+		for (let ifc_name, ifc in config) {
+			if (ifc[".type"] == "wifi-iface" && ifc.device == name) {
+				print(`delete wireless.${ifc_name}\n`);
+				delete config[ifc_name];
+			}
+		}
+		print(`delete wireless.${name}\n`);
+		delete config[name];
+		commit = true;
+	}
+}
+
 for (let phy_name, phy in board.wlan) {
 	let info = phy.info;
 	if (!info || !length(info.bands))
@@ -79,15 +102,15 @@ for (let phy_name, phy in board.wlan) {
 		band_name = lc(band_name);
 
 		let country, encryption, defaults, num_global_macaddr;
+		country = 'US';
 		if (band_name == '6g') {
-			country = '00';
 			encryption = 'owe';
 		} else {
 			encryption = 'none';
 		}
 		if (board.wlan.defaults) {
 			defaults = board.wlan.defaults.ssids?.[band_name]?.ssid ? board.wlan.defaults.ssids?.[band_name] : board.wlan.defaults.ssids?.all;
-			country = board.wlan.defaults.country;
+			country = board.wlan.defaults.country || 'US';
 			if (!country && band_name != '2g')
 				defaults = null;
 			num_global_macaddr = board.wlan.defaults.ssids?.[band_name]?.mac_count;
@@ -96,23 +119,24 @@ for (let phy_name, phy in board.wlan) {
 		if (length(info.radios) > 0)
 			id += `\nset ${s}.radio='${radio.index}'`;
 
+		// Project X-Mesh SSoT 原則：出廠預設樣板 VAP 保持靜默 (disabled='1')，SSID 唯一定義自 Controller
 		print(`set ${s}=wifi-device
 set ${s}.type='mac80211'
 set ${s}.${id}
 set ${s}.band='${band_name}'
 set ${s}.channel='${channel}'
 set ${s}.htmode='${htmode}'
-set ${s}.country='${country || "CN"}'
+set ${s}.country='${country || "US"}'
 set ${s}.num_global_macaddr='${num_global_macaddr || ''}'
 
 set ${si}=wifi-iface
 set ${si}.device='${name}'
 set ${si}.network='lan'
 set ${si}.mode='ap'
-set ${si}.ssid='${defaults?.ssid || "ImmortalWrt"}'
+set ${si}.ssid='${defaults?.ssid || ""}'
 set ${si}.encryption='${defaults?.encryption || encryption}'
 set ${si}.key='${defaults?.key || ""}'
-set ${si}.disabled='0'
+set ${si}.disabled='1'
 
 `);
 		config[name] = {};
@@ -122,3 +146,4 @@ set ${si}.disabled='0'
 
 if (commit)
 	print("commit wireless\n");
+

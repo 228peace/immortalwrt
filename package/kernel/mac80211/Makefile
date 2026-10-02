@@ -10,16 +10,17 @@ include $(INCLUDE_DIR)/kernel.mk
 
 PKG_NAME:=mac80211
 
-PKG_VERSION:=6.18.39
+PKG_SOURCE_VERSION:=7.2
+PKG_VERSION:=$(subst -,_,$(PKG_SOURCE_VERSION))
 PKG_RELEASE:=1
 PKG_LICENSE:=GPL-2.0-only
 PKG_LICENSE_FILES:=COPYING
 
-PKG_SOURCE_URL:=https://github.com/openwrt/backports/releases/download/backports-v$(PKG_VERSION)
-PKG_HASH:=8951c1e270d7c311432377bd50951cd1d5dee2b5fedf33d30db41aa8e428aeb0
+PKG_SOURCE_URL:=https://github.com/openwrt/backports/releases/download/backports-v$(PKG_SOURCE_VERSION)
+PKG_HASH:=6ec76a4cb0988b5382b2fc5053610a56ada90b8ef6a5a4f2807cd433badb9454
 
-PKG_SOURCE:=backports-$(PKG_VERSION).tar.zst
-PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(if $(BUILD_VARIANT),$(PKG_NAME)-$(BUILD_VARIANT)/)backports-$(PKG_VERSION)
+PKG_SOURCE:=backports-$(PKG_SOURCE_VERSION).tar.zst
+PKG_BUILD_DIR:=$(KERNEL_BUILD_DIR)/$(if $(BUILD_VARIANT),$(PKG_NAME)-$(BUILD_VARIANT)/)backports-$(PKG_SOURCE_VERSION)
 PKG_BUILD_PARALLEL:=1
 
 PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
@@ -43,6 +44,7 @@ PKG_CONFIG_DEPENDS:= \
 include $(INCLUDE_DIR)/package.mk
 
 WMENU:=Wireless Drivers
+NSS_PATCH:=subsys ath10k ath11k
 
 define KernelPackage/mac80211/Default
   SUBMENU:=$(WMENU)
@@ -282,9 +284,15 @@ ifeq ($(BUILD_VARIANT),smallbuffers)
 	C_DEFINES+= -DCONFIG_ATH10K_SMALLBUFFERS
 endif
 
+ifdef CONFIG_ATH11K_NSS_SUPPORT
+	IREMAP_CFLAGS+=-I$(STAGING_DIR)/usr/include/qca-nss-drv -I$(STAGING_DIR)/usr/include/qca-nss-clients
+endif
+
+MAC80211_CFLAGS:=-I$(PKG_BUILD_DIR)/include $(IREMAP_CFLAGS) $(C_DEFINES)
+
 MAKE_OPTS:= \
-	$(subst -C $(LINUX_DIR),-C "$(PKG_BUILD_DIR)",$(KERNEL_MAKEOPTS)) \
-	EXTRA_CFLAGS="-I$(PKG_BUILD_DIR)/include $(IREMAP_CFLAGS) $(C_DEFINES)" \
+	$(subst KCFLAGS=",KCFLAGS="$(MAC80211_CFLAGS) ,$(subst -C $(LINUX_DIR),-C "$(PKG_BUILD_DIR)",$(KERNEL_MAKEOPTS))) \
+	EXTRA_CFLAGS="$(MAC80211_CFLAGS)" \
 	KLIB_BUILD="$(LINUX_DIR)" \
 	MODPROBE=true \
 	KLIB=$(TARGET_MODULES_DIR) \
@@ -354,6 +362,11 @@ define Build/Patch
 	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/mwl,mwl/)
 	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/brcm,brcm/)
 	$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/rtl,rtl/)
+ifdef CONFIG_ATH11K_NSS_SUPPORT
+	$(foreach driver,$(NSS_PATCH),
+		$(call PatchDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/$(driver),nss/$(driver)/)
+	)
+endif
 	$(if $(QUILT),touch $(PKG_BUILD_DIR)/.quilt_used)
 endef
 
@@ -371,6 +384,11 @@ define Quilt/Refresh/Package
 	$(call Quilt/RefreshDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/mwl,mwl/)
 	$(call Quilt/RefreshDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/brcm,brcm/)
 	$(call Quilt/RefreshDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/rtl,rtl/)
+ifdef CONFIG_ATH11K_NSS_SUPPORT
+	$(foreach driver,$(NSS_PATCH),
+		$(call Quilt/RefreshDir,$(PKG_BUILD_DIR),$(PATCH_DIR)/nss/$(driver),nss/$(driver)/)
+	)
+endif
 endef
 
 define Build/Compile
@@ -392,6 +410,13 @@ define Build/InstallDev
 	rm -f $(1)/usr/include/mac80211-backport/linux/module.h
 endef
 
+ifdef CONFIG_ATH11K_NSS_SUPPORT
+define KernelPackage/ath11k/install
+	$(INSTALL_DIR) $(1)/etc/init.d $(1)/usr/bin $(1)/etc/hotplug.d/net
+	$(INSTALL_BIN) ./files/qca-nss-pbuf.init $(1)/etc/init.d/qca-nss-pbuf
+	$(INSTALL_DATA) ./files/disable_mesh_chksum_ath11k.hotplug $(1)/etc/hotplug.d/net/99-disable_mesh_chksum_ath11k
+endef
+endif
 
 $(eval $(foreach drv,$(PKG_DRIVERS),$(call KernelPackage,$(drv))))
 $(eval $(call KernelPackage,cfg80211))

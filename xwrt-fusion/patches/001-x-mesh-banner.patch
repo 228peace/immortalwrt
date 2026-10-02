@@ -1,0 +1,10 @@
+--- a/root/usr/sbin/fakemesh
++++ b/root/usr/sbin/fakemesh
+@@ -1,5 +1,7 @@
+ #!/bin/sh
+ 
++logger -t fakemesh "X-Mesh Fusion Architecture (v17.x) starting..."
++
+ . /lib/functions.sh
+ . /lib/functions/network.sh
+ 

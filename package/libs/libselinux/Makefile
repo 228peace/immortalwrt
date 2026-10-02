@@ -121,6 +121,7 @@ endif
 
 MAKE_FLAGS += \
 	SHLIBDIR=/usr/lib \
+	LD_LIBRARY_PATH="" \
 	OS=Linux
 
 define Build/Compile

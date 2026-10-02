@@ -19,7 +19,7 @@ PKG_BUILD_DEPENDS:=fstools
 PKG_LICENSE:=GPL-2.0 GPL-2.0+
 PKG_LICENSE_FILES:=Licenses/README
 
-PKG_BUILD_PARALLEL:=1
+PKG_BUILD_PARALLEL:=0
 #PKG_FLAGS:=nonshared # Use PKGFLAGS instead of PKG_FLAGS for per-binary flags
 
 include $(INCLUDE_DIR)/package.mk
@@ -43,6 +43,7 @@ define Package/fit-check-sign
 	CATEGORY:=Utilities
 	SUBMENU:=Boot Loaders
 	TITLE:=verify uImage.FIT
+	DEPENDS:=+libopenssl
 endef
 
 define Package/fit-check-sign/description
@@ -70,7 +71,7 @@ endef
 
 define Build/Configure
 	$(call Build/Compile/Default,tools-only_defconfig)
-	$(SED) 's/CONFIG_TOOLS_LIBCRYPTO=y/# CONFIG_TOOLS_LIBCRYPTO is not set/' $(PKG_BUILD_DIR)/.config
+	$(if $(CONFIG_PACKAGE_fit-check-sign),,$(SED) 's/CONFIG_TOOLS_LIBCRYPTO=y/# CONFIG_TOOLS_LIBCRYPTO is not set/' $(PKG_BUILD_DIR)/.config)
 	$(SED) 's/CONFIG_TOOLS_KWBIMAGE=y/# CONFIG_TOOLS_KWBIMAGE is not set/' $(PKG_BUILD_DIR)/.config
 endef
 

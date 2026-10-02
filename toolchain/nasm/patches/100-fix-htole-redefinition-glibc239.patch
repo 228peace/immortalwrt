@@ -1,0 +1,56 @@
+--- nasm-3.01/include/bytesex.h	2025-10-11 14:44:05.000000000 +0800
++++ nasm-3.01-patched/include/bytesex.h	2026-08-08 21:08:25.233686591 +0800
+@@ -43,7 +43,7 @@
+                                                                         \
+     return xx
+ 
+-#ifndef HAVE_HTOLE16
++#if !defined(HAVE_HTOLE16) && !defined(htole16)
+ static inline uint16_t htole16(uint16_t v)
+ {
+ # ifdef WORDS_LITTLEENDIAN
+@@ -69,7 +69,7 @@
+ }
+ #endif
+ 
+-#ifndef HAVE_HTOLE32
++#if !defined(HAVE_HTOLE32) && !defined(htole32)
+ static inline uint32_t htole32(uint32_t v)
+ {
+ # ifdef WORDS_LITTLEENDIAN
+@@ -96,7 +96,7 @@
+ }
+ #endif
+ 
+-#ifndef HAVE_HTOLE64
++#if !defined(HAVE_HTOLE64) && !defined(htole64)
+ static inline uint64_t htole64(uint64_t v)
+ {
+ #ifdef WORDS_LITTLEENDIAN
+@@ -125,7 +125,7 @@
+ }
+ #endif
+ 
+-#ifndef HAVE_HTOLE16
++#if !defined(HAVE_HTOLE16) && !defined(htole16)
+ static inline uint16_t le16toh(uint16_t v)
+ {
+ #ifdef WORDS_LITTLEENDIAN
+@@ -142,7 +142,7 @@
+ }
+ #endif
+ 
+-#ifndef HAVE_HTOLE32
++#if !defined(HAVE_HTOLE32) && !defined(htole32)
+ static inline uint32_t le32toh(uint32_t v)
+ {
+ #ifdef WORDS_LITTLEENDIAN
+@@ -159,7 +159,7 @@
+ }
+ #endif
+ 
+-#ifndef HAVE_HTOLE64
++#if !defined(HAVE_HTOLE64) && !defined(htole64)
+ static inline uint64_t le64toh(uint64_t v)
+ {
+ #ifdef WORDS_LITTLEENDIAN

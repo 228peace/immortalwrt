@@ -1,0 +1,126 @@
+--- a/root/usr/sbin/fakemesh
++++ b/root/usr/sbin/fakemesh
+@@ -334,6 +334,29 @@
+ 
+ 		mv /tmp/fakemesh.ac.config.tmp /tmp/fakemesh.ac.config
+ 
++		# X-Mesh Phase 2: Dynamic usteer parameters synchronization
++		new_min_snr=$(uci -q get fakemeshac.default.min_snr)
++		new_roam_trigger=$(uci -q get fakemeshac.default.roam_trigger_snr)
++		new_load_kick=$(uci -q get fakemeshac.default.load_kick_enabled)
++		if [ -n "$new_min_snr" ]; then
++			old_min_snr=$(uci -q get usteer.@usteer[0].min_snr)
++			old_roam_trigger=$(uci -q get usteer.@usteer[0].roam_trigger_snr)
++			old_load_kick=$(uci -q get usteer.@usteer[0].load_kick_enabled)
++			if [ "$old_min_snr" != "$new_min_snr" ] || [ "$old_roam_trigger" != "$new_roam_trigger" ] || [ "$old_load_kick" != "$new_load_kick" ]; then
++				logger -t fakemesh "agent_sync_config($pid): Dynamic usteer parameters changed! Syncing..."
++				uci -q set usteer.@usteer[0].min_snr="$new_min_snr"
++				uci -q set usteer.@usteer[0].roam_trigger_snr="$new_roam_trigger"
++				uci -q set usteer.@usteer[0].load_kick_enabled="$new_load_kick"
++				uci commit usteer
++				/etc/init.d/usteer restart &
++
++				# X-Mesh Phase 2.5: 閉環驗證 usteer 重啟是否成功
++				usteer_restarted=0
++				for i in $(seq 1 10); do if ubus -S call usteer status >/dev/null 2>&1; then usteer_restarted=1; logger -t fakemesh "agent_sync_config($pid): usteer service successfully restarted."; break; fi; sleep 1; done
++				if [ "$usteer_restarted" -eq 0 ]; then logger -t fakemesh "agent_sync_config($pid): ERROR: usteer service failed to restart after config sync."; fi
++			fi
++		fi
++
+ 		test $lost_ac -gt 0 && logger -t fakemesh "agent_sync_config($pid): fetch config ok!"
+ 
+ 		oldbsh=$(uci get fakemesh.default.band_steer_helper || echo none)
+@@ -497,6 +520,8 @@
+ {
+ 	exec /usr/sbin/fakemesh agent_sync_config &
+ 
++	logger -t fakemesh "agent_fix_channel: Starting X-Mesh PULSED Scan logic (v5.5)..."
++
+ 	[ "$role" = "agent" ] || return 0
+ 
+ 	wbandstr=$(uci show wireless | grep .band=\'${band}\'$ -m1)
+@@ -508,32 +533,52 @@
+ 	pid=$$
+ 	touch /tmp/fakemesh_lck1/$pid
+ 
+-	logger -t fakemesh "agent_fix_channel($pid): started!"
++	# X-Mesh: 預先識別同射頻的 AP 介面
++	my_aps=""
++	for ifc in $(uci show wireless | grep -E "=wifi-iface$" | cut -d= -f1 | cut -d. -f2); do
++		if [ "$(uci -q get wireless.$ifc.device)" = "$radio" ] && [ "$(uci -q get wireless.$ifc.mode)" = "ap" ]; then
++			my_aps="$my_aps $ifc"
++		fi
++	done
++
+ 	while :; do
+-		sleep 10
++		# X-Mesh Step 1: 脈衝開始：短暫關閉 AP 以利掃描
++		if [ -n "$my_aps" ]; then
++			for ifc in $my_aps; do uci set wireless.$ifc.disabled="1"; done
++			uci commit wireless && wifi reload $radio
++			sleep 5
++		fi
++
+ 		sta="$(ubus -S list wpa_supplicant.meshx1)"
++		found_chan=""
+ 		if test -n "$sta"; then
+-			chan=$(iwinfo meshx1 scan | grep -A1 -B1 "ESSID: \"${Xid}\"" | head -n3 | tail -n1 | grep -io "Channel:.*"| awk '{print $2}')
+-			if test -n "$chan"; then
+-				if [ "$chan" != "$channel" ]; then
+-					logger -t fakemesh "agent_fix_channel($pid): Setting up channel ($chan) for ${radio}"
+-					uci set wireless.${radio}.channel="$chan"
+-					test "$chan" -ge "36" -a "$chan" -le "44" || {
+-						htmode=$(uci get wireless.${radio}.htmode 2>/dev/null)
+-						if [ "$htmode" = "VHT160" ]; then
+-							uci set wireless.${radio}.htmode="VHT80"
+-						elif [ "$htmode" = "HE160" ]; then
+-							uci set wireless.${radio}.htmode="HE80"
+-						fi
+-					}
+-					uci commit wireless
+-					/etc/init.d/network reload &
+-				fi
+-				logger -t fakemesh "agent_fix_channel($pid): Channel ($chan) for ${radio} ready!"
+-				break
++			found_chan=$(iwinfo meshx1 scan | grep -A1 -B1 "ESSID: \"${Xid}\"" | head -n3 | tail -n1 | grep -io "Channel:.*"| awk '{print $2}')
++		fi
++
+# X-Mesh Step 2: 脈衝結束：立即恢復 AP 廣播
+if [ -n "$my_aps" ]; then
+	for ifc in $my_aps; do uci delete wireless.$ifc.disabled; done
+	uci commit
+	/etc/init.d/network reload
+fi
+
+if [ -n "$found_chan" ]; then
++			if [ "$found_chan" != "$channel" ]; then
++				logger -t fakemesh "agent_fix_channel($pid): Found AC on channel $found_chan. Aligning..."
++				uci set wireless.${radio}.channel="$found_chan"
++				uci commit wireless
++				/etc/init.d/network reload &
++			fi
++			logger -t fakemesh "agent_fix_channel($pid): Channel ($found_chan) for ${radio} ready!"
++			break
+ 		fi
+-		sleep 20
++
++		sleep 40 # 給予 radio 休息與使用者操作的時間
+ 		test -f /tmp/fakemesh_lck1/$pid || return 0
+ 	done
+ 
+@@ -565,6 +610,15 @@
+ [ "x$1" = "xgen_config" ] && {
+ 	# http://controller.fakemesh/fakemesh.435ca8a686ae9f07eb4eb67d2216b154
+ 	[ "$role" = "controller" ] && {
++		# X-Mesh Phase 2: Dynamic usteer configuration injection
++		min_snr=$(uci -q get usteer.@usteer[0].min_snr || echo -75)
++		roam_trigger=$(uci -q get usteer.@usteer[0].roam_trigger_snr || echo -67)
++		load_kick=$(uci -q get usteer.@usteer[0].load_kick_enabled || echo 1)
++		uci -q set fakemesh.default.min_snr="$min_snr"
++		uci -q set fakemesh.default.roam_trigger_snr="$roam_trigger"
++		uci -q set fakemesh.default.load_kick_enabled="$load_kick"
++		uci commit fakemesh
++
+ 		hash=$(echo -n ${Xid}${Xkey} | md5sum | head -c32)
+ 		ln -s /etc/config/fakemesh /www/fakemesh.$hash 2>/dev/null
+ 		for f in $(ls /www/fakemesh.*); do
