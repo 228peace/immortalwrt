@@ -613,3 +613,5 @@ define Device/zyxel_nwa210ax
 	IMAGE/factory.bin := append-ubi | check-size $$$$(IMAGE_SIZE) | zyxel-nwa210ax-fit
 endef
 TARGET_DEVICES += zyxel_nwa210ax
+
+-include d156.mk

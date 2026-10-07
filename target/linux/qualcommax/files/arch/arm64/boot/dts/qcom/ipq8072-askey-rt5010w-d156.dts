@@ -1,0 +1,367 @@
+// SPDX-License-Identifier: GPL-2.0-or-later OR MIT
+
+/dts-v1/;
+
+#include "ipq8074.dtsi"
+#include "ipq8074-hk-cpu.dtsi"
+#include "ipq8074-ess.dtsi"
+#include <dt-bindings/gpio/gpio.h>
+#include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "Askey RT5010W-D156/REV1";
+	compatible = "askey,rt5010w-d156-rev1", "askey,rt5010w-d156", "qcom,ipq8074";
+
+	aliases {
+		led-boot = &led_system_red;
+		led-failsafe = &led_system_red;
+		led-running = &led_system_blue;
+		led-upgrade = &led_system_red;
+		serial0 = &blsp1_uart5;
+		/* Aliases as required by u-boot to patch MAC addresses */
+		ethernet0 = &dp6_syn;
+		ethernet1 = &dp4;
+		ethernet2 = &dp3;
+		ethernet3 = &dp2;
+		ethernet4 = &dp5;
+		label-mac-device = &dp6_syn;
+	};
+
+	chosen {
+		stdout-path = "serial0:115200n8";
+		bootargs-append = " earlycon clk_ignore_unused";
+	};
+
+	memory@40000000 {
+		device_type = "memory";
+		reg = <0x0 0x40000000 0x0 0x40000000>; /* Force 1 GB DRAM limit */
+	};
+
+	keys {
+		compatible = "gpio-keys";
+
+		reset {
+			label = "reset";
+			gpios = <&tlmm 46 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_RESTART>;
+		};
+
+		wps {
+			label = "wps";
+			gpios = <&tlmm 57 GPIO_ACTIVE_LOW>;
+			linux,code = <KEY_WPS_BUTTON>;
+		};
+	};
+
+	leds {
+		compatible = "gpio-leds";
+
+		led_system_blue: system-blue {
+			gpios = <&tlmm 18 GPIO_ACTIVE_HIGH>;
+			color = <LED_COLOR_ID_BLUE>;
+			function = LED_FUNCTION_STATUS;
+		};
+
+		led_system_yellow: system-yellow {
+			gpios = <&tlmm 19 GPIO_ACTIVE_HIGH>;
+			color = <LED_COLOR_ID_YELLOW>;
+			function = LED_FUNCTION_STATUS;
+		};
+
+		led_system_red: system-red {
+			gpios = <&tlmm 20 GPIO_ACTIVE_HIGH>;
+			color = <LED_COLOR_ID_RED>;
+			function = LED_FUNCTION_STATUS;
+		};
+	};
+};
+
+&tlmm {
+	mdio_pins: mdio-pins {
+		mdc {
+			pins = "gpio68";
+			function = "mdc";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+
+		mdio {
+			pins = "gpio69";
+			function = "mdio";
+			drive-strength = <8>;
+			bias-pull-up;
+		};
+	};
+};
+
+&blsp1_uart5 {
+	status = "okay";
+};
+
+&prng {
+	status = "okay";
+};
+
+&cryptobam {
+	status = "okay";
+};
+
+&crypto {
+	status = "okay";
+};
+
+&qpic_bam {
+	status = "okay";
+};
+
+&qpic_nand {
+	status = "okay";
+
+	nand@0 {
+		reg = <0>;
+		nand-ecc-strength = <8>;
+		nand-ecc-step-size = <512>;
+		nand-bus-width = <8>;
+
+		partitions {
+			compatible = "qcom,smem-part";
+		};
+	};
+};
+
+&blsp1_spi1 {
+	pinctrl-0 = <&spi_0_pins>;
+	pinctrl-names = "default";
+	status = "okay";
+
+	flash@0 {
+		compatible = "jedec,spi-nor";
+		reg = <0>;
+		spi-max-frequency = <50000000>;
+
+		partitions {
+			compatible = "fixed-partitions";
+			#address-cells = <1>;
+			#size-cells = <1>;
+
+			partition@0 {
+				label = "0:SBL1";
+				reg = <0x0 0xa0000>;
+				read-only;
+			};
+
+			partition@a0000 {
+				label = "0:APPSBLENV";
+				reg = <0xa0000 0x40000>;
+			};
+
+			partition@e0000 {
+				label = "0:APPSBL";
+				reg = <0xe0000 0x100000>;
+				read-only;
+			};
+		};
+	};
+};
+
+&mdio {
+	pinctrl-0 = <&mdio_pins>;
+	pinctrl-names = "default";
+	reset-gpios = <&tlmm 37 GPIO_ACTIVE_LOW>;
+	status = "okay";
+
+	ethernet-phy-package@0 {
+	        #address-cells = <1>;
+	        #size-cells = <0>;
+	        compatible = "qcom,qca8075-package";
+	        reg = <0>;
+
+	        qcom,package-mode = "psgmii";
+
+		qca8075_1: ethernet-phy@1 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <1>;
+		};
+
+		qca8075_2: ethernet-phy@2 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <2>;
+		};
+
+		qca8075_3: ethernet-phy@3 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <3>;
+		};
+
+		qca8075_4: ethernet-phy@4 {
+			compatible = "ethernet-phy-ieee802.3-c22";
+			reg = <4>;
+		};
+	};
+
+	aqr112: ethernet-phy@7 {
+		compatible = "ethernet-phy-id03a1.b662", "ethernet-phy-ieee802.3-c45";
+		reg = <7>;
+		reset-gpios = <&tlmm 44 GPIO_ACTIVE_LOW>;
+		reset-deassert-us = <10000>;
+
+		leds {
+			#address-cells = <1>;
+			#size-cells = <0>;
+
+			led@0 {
+				reg = <0>;
+				color = <LED_COLOR_ID_YELLOW>;
+				function = LED_FUNCTION_WAN;
+				default-state = "keep";
+				active-low;
+			};
+
+			led@2 {
+				reg = <2>;
+				color = <LED_COLOR_ID_GREEN>;
+				function = LED_FUNCTION_WAN;
+				default-state = "keep";
+				active-low;
+			};
+		};
+	};
+};
+
+&switch {
+	/* Controller Mode (Isolated 2.5G WAN) */
+	switch_lan_bmp = <(ESS_PORT2 | ESS_PORT3 | ESS_PORT4 | ESS_PORT5)>;
+	switch_wan_bmp = <ESS_PORT6>;
+
+	/* AP Agent Mode (Bridged 2.5G LAN)
+	switch_lan_bmp = <(ESS_PORT2 | ESS_PORT3 | ESS_PORT4 | ESS_PORT5 | ESS_PORT6)>;
+	switch_wan_bmp = <0>;
+	*/
+
+        switch_mac_mode = <MAC_MODE_PSGMII>; /* mac mode for uniphy instance0*/
+        switch_mac_mode2 = <MAC_MODE_USXGMII>; /* mac mode for uniphy instance2*/
+        status = "okay";
+
+	qcom,port_phyinfo {
+		port@2 {
+			port_id = <2>;
+			phy_address = <1>;
+		};
+
+		port@3 {
+			port_id = <3>;
+			phy_address = <2>;
+		};
+
+		port@4 {
+			port_id = <4>;
+			phy_address = <3>;
+		};
+
+		port@5 {
+			port_id = <5>;
+			phy_address = <4>;
+		};
+
+		port@6 {
+			port_id = <6>;
+			phy_address = <7>;
+			port_mac_sel = "QGMAC_PORT";
+			ethernet-phy-ieee802.3-c45;
+		};
+	};
+};
+
+&edma {
+	status = "okay";
+};
+
+&dp2 {
+        phy-mode = "psgmii";
+        phy-handle = <&qca8075_1>;
+        label = "lan3";
+        status = "okay";
+};
+
+&dp3 {
+        phy-mode = "psgmii";
+        phy-handle = <&qca8075_2>;
+        label = "lan2";
+        status = "okay";
+};
+
+&dp4 {
+        phy-mode = "psgmii";
+        phy-handle = <&qca8075_3>;
+        label = "lan1";
+        status = "okay";
+};
+
+&dp5 {
+        phy-mode = "psgmii";
+        phy-handle = <&qca8075_4>;
+        label = "lan4";
+        status = "okay";
+};
+
+&dp6_syn {
+	phy-mode = "usxgmii";
+	phy-handle = <&aqr112>;
+	label = "wan";
+	managed = "in-band-status";
+	status = "okay";
+};
+
+&pcie_qmp0 {
+	status = "disabled";
+};
+
+&pcie0 {
+	status = "disabled";
+
+	perst-gpios = <&tlmm 58 GPIO_ACTIVE_LOW>;
+
+	pcie@0 {
+		wifi@0,0 {
+			status = "disabled";
+			compatible = "pci17cb,1104";
+			reg = <0x00010000 0 0 0 0>;
+			qcom,ath11k-calibration-variant = "Spectrum-SAX1V1K";
+		};
+	};
+};
+
+&qusb_phy_0 {
+	status = "okay";
+};
+
+&qusb_phy_1 {
+	status = "okay";
+};
+
+&ssphy_0 {
+	status = "okay";
+};
+
+&ssphy_1 {
+	status = "okay";
+};
+
+&usb_0 {
+	status = "okay";
+};
+
+&usb_1 {
+	status = "okay";
+};
+
+&q6v5_wcss {
+	status = "disabled";
+};
+
+&wifi {
+	qcom,ath11k-calibration-variant = "Spectrum-SAX1V1K";
+	status = "disabled";
+};
+

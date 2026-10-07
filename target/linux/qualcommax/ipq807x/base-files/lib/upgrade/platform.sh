@@ -152,6 +152,15 @@ platform_check_image() {
 
 platform_pre_upgrade() {
 	case "$(board_name)" in
+	askey,rt5010w-d156*)
+		[ "$(rootfs_type)" = "tmpfs" ] && {
+			local rootfs_mtdnum="$(find_mtd_index rootfs)"
+			if [ -n "$rootfs_mtdnum" ]; then
+				ubidetach -m "$rootfs_mtdnum" 2>/dev/null || true
+				ubiformat "/dev/mtd$rootfs_mtdnum" -y
+			fi
+		}
+		;;
 	asus,rt-ax89x)
 		asus_initial_setup
 		;;
@@ -186,6 +195,11 @@ platform_do_upgrade() {
 	netgear,wax620|\
 	netgear,wax630|\
 	zyxel,nwa210ax)
+		nand_do_upgrade "$1"
+		;;
+	askey,rt5010w-d156*)
+		CI_UBIPART="rootfs"
+		CI_ROOTPART="ubi_rootfs"
 		nand_do_upgrade "$1"
 		;;
 	asus,rt-ax89x)

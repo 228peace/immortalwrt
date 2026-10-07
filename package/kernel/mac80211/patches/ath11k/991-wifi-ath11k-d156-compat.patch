@@ -1,0 +1,142 @@
+--- a/drivers/net/wireless/ath/ath11k/qmi.c
++++ b/drivers/net/wireless/ath/ath11k/qmi.c
+@@ -1988,8 +1988,14 @@ int ath11k_qmi_host_cap_send(struct ath1
+ 		req.m3_cache_support = 0;
+ 	}
+ 
+-	req.cal_done_valid = 1;
+-	req.cal_done = ab->qmi.cal_done;
++	if (of_machine_is_compatible("askey,rt5010w-d156") ||
++	    of_machine_is_compatible("askey,rt5010w-d156-rev1")) {
++		req.cal_done_valid = 1;
++		req.cal_done = 1;
++	} else {
++		req.cal_done_valid = 1;
++		req.cal_done = ab->qmi.cal_done;
++	}
+ 
+ 	if (ab->hw_params.internal_sleep_clock) {
+		req.nm_modem_valid = 1;
+	}
+
+@@ -3249,17 +3257,27 @@ static int ath11k_qmi_event_load_bdf(str
+ 	struct ath11k_base *ab = qmi->ab;
+ 	int ret;
+ 
+-	ret = ath11k_qmi_request_target_cap(ab);
+-	if (ret < 0) {
+-		ath11k_warn(ab, "failed to request qmi target capabilities: %d\n",
+-			    ret);
+-		return ret;
+-	}
++	if (of_machine_is_compatible("askey,rt5010w-d156") ||
++	    of_machine_is_compatible("askey,rt5010w-d156-rev1")) {
++		ath11k_info(ab, "bypassing target cap and device info request for legacy firmware\n");
++		ab->qmi.target.chip_id = 0;
++		ab->qmi.target.chip_family = 0x12;
++		ab->qmi.target.board_id = 0xff;
++		ab->qmi.target.soc_id = 0x342;
++		strscpy(ab->qmi.target.bdf_ext, "Spectrum-SAX1V1K", sizeof(ab->qmi.target.bdf_ext));
++	} else {
++		ret = ath11k_qmi_request_target_cap(ab);
++		if (ret < 0) {
++			ath11k_warn(ab, "failed to request qmi target capabilities: %d\n",
++				    ret);
++			return ret;
++		}
+ 
+-	ret = ath11k_qmi_request_device_info(ab);
+-	if (ret < 0) {
+-		ath11k_warn(ab, "failed to request qmi device info: %d\n", ret);
+-		return ret;
++		ret = ath11k_qmi_request_device_info(ab);
++		if (ret < 0) {
++			ath11k_warn(ab, "failed to request qmi device info: %d\n", ret);
++			return ret;
++		}
+ 	}
+ 
+ 	if (ab->hw_params.supports_regdb)
+@@ -3280,3 +3298,28 @@ static int ath11k_qmi_event_server_arriv
+ 	struct ath11k_base *ab = qmi->ab;
+ 	int ret;
+ 
+-	ret = ath11k_qmi_fw_ind_register_send(ab);
++	if (of_machine_is_compatible("askey,rt5010w-d156") ||
++	    of_machine_is_compatible("askey,rt5010w-d156-rev1")) {
++		ath11k_info(ab, "D156: Bypassing QMI handshake and forcing firmware ready!\n");
++		ab->qmi.target.chip_id = 0;
++		ab->qmi.target.chip_family = 0x12;
++		ab->qmi.target.board_id = 0xff;
++		ab->qmi.target.soc_id = 0x342;
++		strscpy(ab->qmi.target.bdf_ext, "Spectrum-SAX1V1K", sizeof(ab->qmi.target.bdf_ext));
++
++		ret = ath11k_qmi_load_bdf_qmi(ab, false);
++		if (ret < 0) {
++			ath11k_warn(ab, "failed to load board data: %d\n", ret);
++			return ret;
++		}
++
++		clear_bit(ATH11K_FLAG_CRASH_FLUSH, &ab->dev_flags);
++		clear_bit(ATH11K_FLAG_RECOVERY, &ab->dev_flags);
++		ret = ath11k_core_qmi_firmware_ready(ab);
++		if (ret) {
++			ath11k_warn(ab, "failed to force firmware ready: %d\n", ret);
++			return ret;
++		}
++		return 0;
++	}
++
++	ret = ath11k_qmi_fw_ind_register_send(ab);
+ 	if (ret < 0) {
+ 		ath11k_warn(ab, "failed to send qmi firmware indication: %d\n",
+ 			    ret);
+--- a/drivers/net/wireless/ath/ath11k/ce.c
++++ b/drivers/net/wireless/ath/ath11k/ce.c
+@@ -471,6 +471,11 @@ static struct sk_buff *ath11k_ce_complet
+ 
+ 	srng = &ab->hal.srng_list[pipe->src_ring->hal_ring_id];
+ 
++	if (!srng->ring_base_vaddr) {
++		spin_unlock_bh(&ab->ce.ce_lock);
++		return ERR_PTR(-EINVAL);
++	}
++
+ 	spin_lock_bh(&srng->lock);
+ 
+ 	ath11k_hal_srng_access_begin(ab, srng);
+@@ -751,6 +756,11 @@ int ath11k_ce_send(struct ath11k_base *a
+ 
+ 	srng = &ab->hal.srng_list[pipe->src_ring->hal_ring_id];
+ 
++	if (!srng->ring_base_vaddr) {
++		spin_unlock_bh(&ab->ce.ce_lock);
++		return -EINVAL;
++	}
++
+ 	spin_lock_bh(&srng->lock);
+ 
+ 	ath11k_hal_srng_access_begin(ab, srng);
+@@ -871,6 +881,10 @@ void ath11k_ce_cleanup_pipes(struct ath1
+ 
+ 	for (pipe_num = 0; pipe_num < ab->hw_params.ce_count; pipe_num++) {
+ 		pipe = &ab->ce.ce_pipe[pipe_num];
++
++		if (!pipe->src_ring)
++			continue;
++
+ 		ath11k_ce_rx_pipe_cleanup(pipe);
+ 
+ 		/* Cleanup any src CE's which have interrupts disabled */
+--- a/drivers/net/wireless/ath/ath11k/dp.c
++++ b/drivers/net/wireless/ath/ath11k/dp.c
+@@ -1028,6 +1028,9 @@ void ath11k_dp_free(struct ath11k_base *
+ 	struct ath11k_dp *dp = &ab->dp;
+ 	int i;
+ 
++	if (!ab->hal.srng_list[0].ring_base_vaddr)
++		return;
++
+ 	ath11k_dp_link_desc_cleanup(ab, dp->link_desc_banks,
+ 				    HAL_WBM_IDLE_LINK, &dp->wbm_idle_ring);
+ 

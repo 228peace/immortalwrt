@@ -1,0 +1,321 @@
+From: OpenWrt <contact@openwrt.org>
+Date: Fri, 15 Aug 2026 07:00:00 +0800
+Subject: [PATCH] wifi: ath11k: support 8bit legacy Rev 1.0 DSP firmware QMI protocol and bypass runtime coldboot calibration
+
+--- a/drivers/net/wireless/ath/ath11k/qmi.c	2026-08-15 13:31:43.548222379 +0800
++++ b/drivers/net/wireless/ath/ath11k/qmi.c	2026-08-15 13:32:05.291420656 +0800
+@@ -299,6 +299,257 @@
+ 	},
+ };
+ 
++static const struct qmi_elem_info ath11k_qmi_host_cap_8bit_req_msg_v01_ei[] = {
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x10,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   num_clients_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x10,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   num_clients),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x11,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   wake_msi_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_4_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u32),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x11,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   wake_msi),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x12,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   gpios_valid),
++	},
++	{
++		.data_type	= QMI_DATA_LEN,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x12,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   gpios_len),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_4_BYTE,
++		.elem_len	= QMI_WLFW_MAX_NUM_GPIO_V01,
++		.elem_size	= sizeof(u32),
++		.array_type	= VAR_LEN_ARRAY,
++		.tlv_type	= 0x12,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   gpios),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x13,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   nm_modem_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x13,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   nm_modem),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x14,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   bdf_support_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x14,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   bdf_support),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x15,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   bdf_cache_support_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x15,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   bdf_cache_support),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x16,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   m3_support_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x16,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   m3_support),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x17,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   m3_cache_support_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x17,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   m3_cache_support),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x18,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   cal_filesys_support_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x18,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   cal_filesys_support),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x19,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   cal_cache_support_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x19,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   cal_cache_support),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x1A,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   cal_done_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x1A,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   cal_done),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x1B,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   mem_bucket_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_4_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u32),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x1B,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   mem_bucket),
++	},
++	{
++		.data_type	= QMI_OPT_FLAG,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x1C,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   mem_cfg_mode_valid),
++	},
++	{
++		.data_type	= QMI_UNSIGNED_1_BYTE,
++		.elem_len	= 1,
++		.elem_size	= sizeof(u8),
++		.array_type	= NO_ARRAY,
++		.tlv_type	= 0x1C,
++		.offset		= offsetof(struct qmi_wlanfw_host_cap_req_msg_v01,
++					   mem_cfg_mode),
++	},
++	{
++		.data_type	= QMI_EOTI,
++		.array_type	= NO_ARRAY,
++		.tlv_type	= QMI_COMMON_TLV_TYPE,
++	},
++};
++
+ static const struct qmi_elem_info qmi_wlanfw_ind_register_req_msg_v01_ei[] = {
+ 	{
+ 		.data_type	= QMI_OPT_FLAG,
+@@ -1766,10 +2017,19 @@ static int ath11k_qmi_host_cap_send(stru
+ 	if (ret < 0)
+ 		goto out;
+ 
++	const struct qmi_elem_info *req_ei;
++
++	if (ab->hw_params.fixed_mem_region ||
++	    of_machine_is_compatible("askey,rt5010w-d156") ||
++	    of_machine_is_compatible("askey,rt5010w-d156-rev1"))
++		req_ei = ath11k_qmi_host_cap_8bit_req_msg_v01_ei;
++	else
++		req_ei = qmi_wlanfw_host_cap_req_msg_v01_ei;
++
+ 	ret = qmi_send_request(&ab->qmi.handle, NULL, &txn,
+ 			       QMI_WLANFW_HOST_CAP_REQ_V01,
+ 			       QMI_WLANFW_HOST_CAP_REQ_MSG_V01_MAX_LEN,
+-			       qmi_wlanfw_host_cap_req_msg_v01_ei, &req);
++			       req_ei, &req);
+ 	if (ret < 0) {
+ 		qmi_txn_cancel(&txn);
+ 		ath11k_warn(ab, "failed to send host capability request: %d\n", ret);
+@@ -1781,10 +2039,16 @@
+ 		goto out;
+ 
+ 	if (resp.resp.result != QMI_RESULT_SUCCESS_V01) {
+-		ath11k_warn(ab, "host capability request failed: %d %d\n",
++		ath11k_warn(ab, "host capability response: result %d error %d\n",
+ 			    resp.resp.result, resp.resp.error);
+-		ret = -EINVAL;
+-		goto out;
++		if (resp.resp.error == QMI_ERR_MALFORMED_MSG_V01 ||
++		    resp.resp.error == QMI_ERR_NOT_SUPPORTED_V01) {
++			ath11k_warn(ab, "ignoring unsupported host capability request for legacy firmware\n");
++			ret = 0;
++		} else {
++			ret = -EINVAL;
++			goto out;
++		}
+ 	}
+ 
+ out:
+
+--- a/drivers/net/wireless/ath/ath11k/core.c	2026-08-15 13:31:43.550222306 +0800
++++ b/drivers/net/wireless/ath/ath11k/core.c	2026-08-15 13:32:13.851105040 +0800
+@@ -89,9 +89,9 @@
+ 		.supports_shadow_regs = false,
+ 		.idle_ps = false,
+ 		.supports_sta_ps = false,
+-		.coldboot_cal_mm = true,
+-		.coldboot_cal_ftm = true,
+-		.cbcal_restart_fw = true,
++		.coldboot_cal_mm = false,
++		.coldboot_cal_ftm = false,
++		.cbcal_restart_fw = false,
+ 		.fw_mem_mode = 0,
+ 		.num_vdevs = 16 + 1,
+ 		.num_peers = 512,

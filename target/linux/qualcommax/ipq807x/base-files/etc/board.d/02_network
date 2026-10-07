@@ -23,6 +23,7 @@ ipq807x_setup_interfaces()
 		ucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4 lan5 lan6 lan7 lan8 10g-sfp 10g-copper" "wan"
 		;;
 	arcadyan,aw1000|\
+	askey,rt5010w-d156*|\
 	buffalo,wxr-5950ax12|\
 	dynalink,dl-wrx36|\
 	linksys,mx5300|\
