@@ -386,6 +386,7 @@
 
 &qcom_ppe {
 	status = "okay";
+	qcom,rx-low-memory;
 
 	ethernet-ports {
 		#address-cells = <1>;
@@ -577,6 +578,7 @@
 			compatible = "pci17cb,1109";
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 			qcom,calibration-variant = "Askey-SBE1V1K_1";
+			qcom,rx-skb-slab;
 
 			nvmem-cells = <&ethaddr (-3)>;
 			nvmem-cell-names = "mac-address";
@@ -628,6 +630,7 @@
 			compatible = "pci17cb,1109";
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 			qcom,calibration-variant = "Askey-SBE1V1K_4";
+			qcom,rx-skb-slab;
 			qcom,wsi-controller;
 
 			nvmem-cells = <&ethaddr (-1)>;
@@ -681,6 +684,7 @@
 			compatible = "pci17cb,1109";
 			reg = <0x0 0x0 0x0 0x0 0x0>;
 			qcom,calibration-variant = "Askey-SBE1V1K_2";
+			qcom,rx-skb-slab;
 
 			nvmem-cells = <&ethaddr (-2)>;
 			nvmem-cell-names = "mac-address";
