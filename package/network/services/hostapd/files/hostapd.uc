@@ -1,4 +1,5 @@
 let libubus = require("ubus");
+import * as uloop from "uloop";
 import { open, readfile, access } from "fs";
 import { wdev_remove, is_equal, vlist_new, phy_is_fullmac, phy_open, wdev_set_radio_mask, wdev_set_up } from "common";
 
@@ -193,6 +194,9 @@ function __iface_pending_next(pending, state, ret, data)
 	if (pending.defer)
 		pending.defer.abort();
 	delete pending.defer;
+	if (pending.timer)
+		pending.timer.cancel();
+	delete pending.timer;
 	switch (state) {
 	case "init":
 		iface_update_supplicant_macaddr(phydev, config);
@@ -274,7 +278,16 @@ function iface_pending_ubus_call(obj, method, arg)
 {
 	let ubus = hostapd.data.ubus;
 	let pending = this;
-	this.defer = ubus.defer(obj, method, arg, (ret, data) => { delete pending.defer; pending.next(ret, data) });
+
+	/* libubus can run this from inside a synchronous ubus call, so continue
+	 * from the event loop */
+	this.defer = ubus.defer(obj, method, arg, (ret, data) => {
+		delete pending.defer;
+		pending.timer = uloop.timer(0, () => {
+			delete pending.timer;
+			pending.next(ret, data);
+		});
+	});
 }
 
 const iface_pending_proto = {
