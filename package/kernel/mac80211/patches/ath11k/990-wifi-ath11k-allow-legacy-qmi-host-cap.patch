@@ -268,8 +268,7 @@ Subject: [PATCH] wifi: ath11k: support 8bit legacy Rev 1.0 DSP firmware QMI prot
  
 +	const struct qmi_elem_info *req_ei;
 +
-+	if (ab->hw_params.fixed_mem_region ||
-+	    of_machine_is_compatible("askey,rt5010w-d156") ||
++	if (of_machine_is_compatible("askey,rt5010w-d156") ||
 +	    of_machine_is_compatible("askey,rt5010w-d156-rev1"))
 +		req_ei = ath11k_qmi_host_cap_8bit_req_msg_v01_ei;
 +	else
